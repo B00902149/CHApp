@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "CoachingHub",
+    "slug": "CoachingHubApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff",
+    "plugins": [
+      [
+        "react-native-health-connect",
+        {
+          "permissions": [
+            "Steps", "HeartRate", "Weight", "SleepSession", "ActiveCaloriesBurned"]
+        }
+      ]
+    ]  
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.fff",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app needs access to your health data to track your fitness progress.",
+        "NSHealthUpdateUsageDescription": "This app needs permission to update your health data."
+    }
+    }
+  },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }

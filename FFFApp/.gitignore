@@ -1,0 +1,23 @@
+# Node
+node_modules/
+npm-debug.log
+
+# Expo
+.expo/
+.expo-shared/
+
+# Environment
+.env
+.env.local
+
+# Backend
+backend/node_modules/
+backend/.env
+
+# OS
+.DS_Store
+*.swp
+
+# IDE
+.vscode/
+.idea/
