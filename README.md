@@ -16,21 +16,21 @@ A cross-platform mobile fitness app built with React Native (Expo), integrating 
 
 ## 📱 Screenshots
 
-| Signup                            | Dashboard                               | My Health                           |
-|-----------------------------------|-----------------------------------------|-------------------------------------|
-| ![Signup](screenshots/Signup.png) | ![Dashboard](screenshots/Dashboard.png) | ![Health](screenshots/MyHealth.png) |
+| Signup                                   | Dashboard                                      | My Health                                  |
+|------------------------------------------|------------------------------------------------|--------------------------------------------|
+| ![Signup](FFFApp/screenshots/Signup.png) | ![Dashboard](FFFApp/screenshots/Dashboard.png) | ![Health](FFFApp/screenshots/MyHealth.png) |
 
-| Exercise                              | Nutrition                               | Community                               |
-|---------------------------------------|-----------------------------------------|-----------------------------------------|
-| ![Exercise](screenshots/Exercise.png) | ![Nutrition](screenshots/Nutrition.png) | ![Community](screenshots/Community.png) |
+| Exercise                                     | Nutrition                                      | Community                                      |
+|----------------------------------------------|------------------------------------------------|------------------------------------------------|
+| ![Exercise](FFFApp/screenshots/Exercise.png) | ![Nutrition](FFFApp/screenshots/Nutrition.png) | ![Community](FFFApp/screenshots/Community.png) |
 
-| Profile                             | Search                            |
-|-------------------------------------|-----------------------------------|
-| ![Profile](screenshots/Profile.png) | ![Search](screenshots/Search.png) |
+| Profile                                    | Search                                   |
+|--------------------------------------------|------------------------------------------|
+| ![Profile](FFFApp/screenshots/Profile.png) | ![Search](FFFApp/screenshots/Search.png) |
 
-| ExerciseDemo                                  | AddPost                             | Macros                            |
-|-----------------------------------------------|-------------------------------------|-----------------------------------|
-| ![ExerciseDemo](screenshots/ExerciseDemo.png) | ![AddPost](screenshots/AddPost.png) | ![Macros](screenshots/Macros.png) | |
+| ExerciseDemo                                         | AddPost                                    | Macros                                   |
+|------------------------------------------------------|--------------------------------------------|------------------------------------------|
+| ![ExerciseDemo](FFFApp/screenshots/ExerciseDemo.png) | ![AddPost](FFFApp/screenshots/AddPost.png) | ![Macros](FFFApp/screenshots/Macros.png) | |
 
 ---
 
