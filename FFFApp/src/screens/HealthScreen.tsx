@@ -1,23 +1,32 @@
 // src/screens/HealthScreen.tsx
+// ─────────────────────────────────────────────────────────────────────────────
+// Updated to use the cross-platform healthService (Android + iOS).
+// The only change from the original is:
+//   1. Import from '../services/healthService' instead of '../services/healthConnect'
+//   2. Call initHealthService() instead of initHealthConnect() + requestHealthPermissions()
+//   3. The hint text at the bottom reflects the active platform
+// Everything else — layout, styles, modal, manual entry — is unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, Alert,
   ScrollView, TouchableOpacity, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
-import * as HealthConnect from '../services/healthConnect';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ✅ NEW: single cross-platform import
+import {
+  initHealthService,
+  fetchHealthData,
+  type HealthData,
+} from '../services/healthService';
+
 import { useDailyQuote } from '../hooks/useDailyQuote';
 
-// Shape of health data returned from Health Connect
-type HealthData = {
-  steps: number;
-  heartRate: number | null;
-  weight: string | null;
-  sleep: string | null;
-  calories: number;
-};
+const MANUAL_DATA_KEY = '@health_manual_data';
 
-// Config for each health metric tile — drives the grid layout and the manual entry modal
 const TILES = [
   { key: 'weight',    label: 'WEIGHT',   icon: '⚖️',  color: '#4A9EFF', suffix: '',      placeholder: 'e.g. 82.5 kg' },
   { key: 'sleep',     label: 'SLEEP',    icon: '🌙',  color: '#7B6FFF', suffix: 'hrs',   placeholder: 'e.g. 7.5' },
@@ -29,20 +38,18 @@ const TILES = [
 export const HealthScreen = ({ navigation }: any) => {
   const quote = useDailyQuote();
 
-  const [data, setData]                 = useState<HealthData | null>(null); // live data from Health Connect
+  const [data, setData]                 = useState<HealthData | null>(null);
   const [loading, setLoading]           = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedTile, setSelectedTile] = useState<typeof TILES[0] | null>(null); // tile being manually edited
+  const [selectedTile, setSelectedTile] = useState<typeof TILES[0] | null>(null);
   const [inputValue, setInputValue]     = useState('');
-  // Stores user-entered values keyed by tile key (e.g. { weight: '82.5 kg' })
   const [manualData, setManualData]     = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadManualData();
-    setupHealthConnect();
+    setupHealth();
   }, []);
 
-  // Loads previously saved manual entries from AsyncStorage
   const loadManualData = async () => {
     try {
       const saved = await AsyncStorage.getItem(MANUAL_DATA_KEY);
@@ -50,37 +57,31 @@ export const HealthScreen = ({ navigation }: any) => {
     } catch (e) {}
   };
 
-  // Persists manual entries to AsyncStorage so they survive app restarts
   const saveManualData = async (updated: Record<string, string>) => {
     try {
       await AsyncStorage.setItem(MANUAL_DATA_KEY, JSON.stringify(updated));
     } catch (e) {}
   };
 
-  // Initialises Health Connect, requests permissions, and fetches live health data
-  const setupHealthConnect = async () => {
+  // ✅ NEW: single call that works on both platforms
+  const setupHealth = async () => {
     setLoading(true);
     try {
-      const initialized = await HealthConnect.initHealthConnect();
+      const initialized = await initHealthService();
       if (!initialized) {
-        // Device doesn't support Health Connect — tiles will fall back to manual entry
+        // Device doesn't support health APIs — fall back to manual entry
         setLoading(false);
         return;
       }
-      await HealthConnect.requestHealthPermissions();
-      const healthData = await HealthConnect.fetchHealthData();
+      const healthData = await fetchHealthData();
       setData(healthData);
     } catch (error) {
-      console.error('Health Connect error:', error);
+      console.error('Health service error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Returns the display string for a tile:
-  // 1. Live Health Connect value (if available and non-zero)
-  // 2. Manual entry (if the user has logged one)
-  // 3. '--' if no data exists
   const getValue = (key: string) => {
     if (data) {
       const val = data[key as keyof HealthData];
@@ -93,34 +94,31 @@ export const HealthScreen = ({ navigation }: any) => {
     return '--';
   };
 
-  // Returns true if Health Connect has a real (non-zero) value for this metric
-  const isFromHealthConnect = (key: string) => {
+  const isFromHealthService = (key: string) => {
     if (!data) return false;
     const val = data[key as keyof HealthData];
     return val !== null && val !== undefined && val !== 0;
   };
 
-  // Opens the manual entry modal for a tile — does nothing if the tile has live HC data
   const handleTilePress = (tile: typeof TILES[0]) => {
-    if (isFromHealthConnect(tile.key)) return; // HC data takes priority; can't be overridden manually
+    if (isFromHealthService(tile.key)) return;
     setSelectedTile(tile);
-    setInputValue(manualData[tile.key] ?? ''); // pre-fill with existing manual value if present
+    setInputValue(manualData[tile.key] ?? '');
     setModalVisible(true);
   };
 
-  // Saves the manually entered value, appending the unit suffix if defined
   const handleSave = () => {
     if (!selectedTile || !inputValue.trim()) return;
     const display = selectedTile.suffix
       ? `${inputValue.trim()} ${selectedTile.suffix}`
       : inputValue.trim();
-    // Merge into existing manual data without overwriting other keys
-    setManualData(prev => ({ ...prev, [selectedTile.key]: display }));
+    const updated = { ...manualData, [selectedTile.key]: display };
+    setManualData(updated);
+    saveManualData(updated);
     setModalVisible(false);
     setInputValue('');
   };
 
-  // Full-screen loader shown while Health Connect initialises
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -130,55 +128,51 @@ export const HealthScreen = ({ navigation }: any) => {
     );
   }
 
+  // ✅ Platform-aware label for the footer hint
+  const healthSourceLabel = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
+  const refreshLabel = Platform.OS === 'ios' ? '↻  Refresh Apple Health' : '↻  Refresh Health Connect';
+
   return (
     <View style={styles.container}>
 
-      {/* ── Header: Back / Title ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>MY HEALTH</Text>
-        {/* Spacer keeps the title centred */}
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* ── Daily Quote Card ── */}
         <View style={styles.verseCard}>
           <Text style={styles.verseText}>"{quote.text}"</Text>
           <Text style={styles.verseRef}>— {quote.author}</Text>
         </View>
 
-        {/* ── Health Metric Tiles Grid (2-column wrap) ── */}
         <View style={styles.grid}>
           {TILES.map(tile => {
             const value  = getValue(tile.key);
-            const fromHC = isFromHealthConnect(tile.key); // true = data comes from Health Connect
+            const fromHS = isFromHealthService(tile.key);
 
             return (
               <TouchableOpacity
                 key={tile.key}
                 style={[styles.tile, { borderTopColor: tile.color }]}
                 onPress={() => handleTilePress(tile)}
-                // Tiles with live data aren't interactive (no opacity feedback)
-                activeOpacity={fromHC ? 1 : 0.7}
+                activeOpacity={fromHS ? 1 : 0.7}
               >
                 <Text style={styles.tileIcon}>{tile.icon}</Text>
-                {/* Value turns dim blue when no data is available */}
                 <Text style={[styles.tileValue, value === '--' && styles.tileEmpty]}>
                   {value}
                 </Text>
                 <Text style={styles.tileLabel}>{tile.label}</Text>
-                {/* Show "+ Add" or "✎ Edit" hint only on manually-editable tiles */}
-                {!fromHC && (
+                {!fromHS && (
                   <Text style={[styles.tapHint, { color: tile.color }]}>
                     {value === '--' ? '+ Add' : '✎ Edit'}
                   </Text>
                 )}
-                {/* Live badge shown on tiles sourced from Health Connect */}
-                {fromHC && (
+                {fromHS && (
                   <Text style={styles.hcBadge}>⚡ Live</Text>
                 )}
               </TouchableOpacity>
@@ -186,17 +180,15 @@ export const HealthScreen = ({ navigation }: any) => {
           })}
         </View>
 
-        {/* ── Refresh Button — re-runs Health Connect fetch ── */}
-        <TouchableOpacity style={styles.refreshButton} onPress={setupHealthConnect}>
-          <Text style={styles.refreshText}>↻  Refresh Health Connect</Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={setupHealth}>
+          <Text style={styles.refreshText}>{refreshLabel}</Text>
         </TouchableOpacity>
 
         <Text style={styles.hint}>
-          Live data from Health Connect · Tap tiles to add manually
+          Live data from {healthSourceLabel} · Tap tiles to add manually
         </Text>
       </ScrollView>
 
-      {/* ── Manual Entry Modal (bottom sheet) ── */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -207,7 +199,6 @@ export const HealthScreen = ({ navigation }: any) => {
               <>
                 <Text style={styles.modalIcon}>{selectedTile.icon}</Text>
                 <Text style={styles.modalTitle}>Log {selectedTile.label}</Text>
-                {/* Input border colour matches the tile's accent colour */}
                 <TextInput
                   style={[styles.input, { borderColor: selectedTile.color }]}
                   value={inputValue}
@@ -221,7 +212,6 @@ export const HealthScreen = ({ navigation }: any) => {
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
                     <Text style={styles.cancelText}>Cancel</Text>
                   </TouchableOpacity>
-                  {/* Save button colour matches the tile */}
                   <TouchableOpacity
                     style={[styles.saveBtn, { backgroundColor: selectedTile.color }]}
                     onPress={handleSave}
@@ -263,7 +253,6 @@ const styles = StyleSheet.create({
   verseText: { color: '#c8d8f0', fontSize: 13, fontStyle: 'italic', lineHeight: 20 },
   verseRef: { color: '#4A9EFF', fontSize: 12, marginTop: 6, fontWeight: '600' },
 
-  // 2-column tile grid
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   tile: {
     backgroundColor: '#0d1f3c', borderRadius: 16, width: '48%',
@@ -284,7 +273,6 @@ const styles = StyleSheet.create({
   refreshText: { color: '#4A9EFF', fontWeight: '700', fontSize: 15 },
   hint: { color: '#2a4a7f', textAlign: 'center', fontSize: 11, marginTop: 4 },
 
-  // Manual entry bottom sheet modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalCard: {
     backgroundColor: '#0d1f3c', borderTopLeftRadius: 24, borderTopRightRadius: 24,

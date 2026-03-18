@@ -10,27 +10,55 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff",
+      "backgroundColor": "#ffffff"
+    },
     "plugins": [
       [
         "react-native-health-connect",
         {
           "permissions": [
-            "Steps", "HeartRate", "Weight", "SleepSession", "ActiveCaloriesBurned"]
+            "Steps",
+            "HeartRate",
+            "Weight",
+            "SleepSession",
+            "ActiveCaloriesBurned"
+          ]
+        }
+      ],
+      [
+        "react-native-health",
+        {
+          "isClinicalDataEnabled": false
         }
       ]
-    ]  
+    ],
+    "android": {
+      "package": "com.yourcompany.fff",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a1628"
+      }
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yourcompany.fff",
       "infoPlist": {
-        "NSHealthShareUsageDescription": "This app needs access to your health data to track your fitness progress.",
-        "NSHealthUpdateUsageDescription": "This app needs permission to update your health data."
-    }
-    }
-  },
+        "NSHealthShareUsageDescription": "CoachingHub reads your steps, heart rate, weight, sleep and calories so you can track your fitness in one place.",
+        "NSHealthUpdateUsageDescription": "CoachingHub needs permission to update your health data.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
+      }
+    },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2a51ed24-471d-4bcc-902b-ce35830f970a"
+      }
     }
   }
+}

@@ -1,142 +1,121 @@
-/**
- * CreateWorkoutScreen.js  —  Coaching Hub
- * Matches app design exactly:
- *   - Dark navy bg, card-based layout
- *   - Two tabs: "My Workout" builder + "Browse Exercises" from DB
- *   - Exercise rows same style as Search / Exercise screens
- *   - Sets/reps/rest controls match ExerciseDemo screen pattern
- */
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, FlatList,
   TouchableOpacity, TextInput, StyleSheet,
-  Platform, StatusBar, Alert, Dimensions,
+  Platform, StatusBar, Alert, ActivityIndicator, Image,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-
-const { width } = Dimensions.get('window');
+import { exerciseDB, Exercise } from '../services/exerciseDB';
+import { workoutStorage } from '../services/workoutStorage';
 
 const C = {
-  bg:        '#0A1628',
-  card:      '#0F2040',
-  border:    'rgba(74,144,226,0.18)',
-  blue:      '#007BFF',
-  lightBlue: '#4A90E2',
-  white:     '#FFFFFF',
-  textSec:   '#8899AA',
-  green:     '#28A745',
-  red:       '#DC3545',
-  yellow:    '#FFC107',
+  bg:      '#0a1628',
+  card:    '#0d1f3c',
+  border:  '#1a3a6b',
+  blue:    '#4A9EFF',
+  white:   '#FFFFFF',
+  textSec: '#5a7fa8',
+  textMid: '#2a4a7f',
+  green:   '#26de81',
+  red:     '#FF6B6B',
+  yellow:  '#FF9F43',
 };
 
-// ─── Full exercise DB ──────────────────────────────────────────────────────────
-const EXERCISES = [
-  {id:'e1', name:'Bench Press',           muscle:'Chest',     equip:'Barbell',    type:'Strength',    level:'Intermediate'},
-  {id:'e2', name:'Incline DB Press',      muscle:'Chest',     equip:'Dumbbell',   type:'Strength',    level:'Intermediate'},
-  {id:'e3', name:'Cable Fly',             muscle:'Chest',     equip:'Cable',      type:'Isolation',   level:'Beginner'},
-  {id:'e4', name:'Push-Up',               muscle:'Chest',     equip:'Bodyweight', type:'Strength',    level:'Beginner'},
-  {id:'e5', name:'Dips',                  muscle:'Chest',     equip:'Bodyweight', type:'Strength',    level:'Intermediate'},
-  {id:'e6', name:'Pull-Up',               muscle:'Back',      equip:'Bodyweight', type:'Strength',    level:'Intermediate'},
-  {id:'e7', name:'Barbell Row',           muscle:'Back',      equip:'Barbell',    type:'Strength',    level:'Intermediate'},
-  {id:'e8', name:'Lat Pulldown',          muscle:'Back',      equip:'Cable',      type:'Strength',    level:'Beginner'},
-  {id:'e9', name:'Seated Cable Row',      muscle:'Back',      equip:'Cable',      type:'Isolation',   level:'Beginner'},
-  {id:'e10',name:'Dumbbell Row',          muscle:'Back',      equip:'Dumbbell',   type:'Strength',    level:'Beginner'},
-  {id:'e11',name:'Back Squat',            muscle:'Legs',      equip:'Barbell',    type:'Strength',    level:'Intermediate'},
-  {id:'e12',name:'Romanian Deadlift',     muscle:'Legs',      equip:'Barbell',    type:'Strength',    level:'Intermediate'},
-  {id:'e13',name:'Leg Press',             muscle:'Legs',      equip:'Machine',    type:'Strength',    level:'Beginner'},
-  {id:'e14',name:'Leg Curl',              muscle:'Legs',      equip:'Machine',    type:'Isolation',   level:'Beginner'},
-  {id:'e15',name:'Bulgarian Split Squat', muscle:'Legs',      equip:'Dumbbell',   type:'Strength',    level:'Advanced'},
-  {id:'e16',name:'Box Jump',              muscle:'Legs',      equip:'Bodyweight', type:'Plyometric',  level:'Intermediate'},
-  {id:'e17',name:'Overhead Press',        muscle:'Shoulders', equip:'Barbell',    type:'Strength',    level:'Intermediate'},
-  {id:'e18',name:'Lateral Raise',         muscle:'Shoulders', equip:'Dumbbell',   type:'Isolation',   level:'Beginner'},
-  {id:'e19',name:'Face Pull',             muscle:'Shoulders', equip:'Cable',      type:'Isolation',   level:'Beginner'},
-  {id:'e20',name:'Arnold Press',          muscle:'Shoulders', equip:'Dumbbell',   type:'Strength',    level:'Intermediate'},
-  {id:'e21',name:'Barbell Curl',          muscle:'Arms',      equip:'Barbell',    type:'Isolation',   level:'Beginner'},
-  {id:'e22',name:'Tricep Pushdown',       muscle:'Arms',      equip:'Cable',      type:'Isolation',   level:'Beginner'},
-  {id:'e23',name:'Hammer Curl',           muscle:'Arms',      equip:'Dumbbell',   type:'Isolation',   level:'Beginner'},
-  {id:'e24',name:'Skull Crushers',        muscle:'Arms',      equip:'Barbell',    type:'Isolation',   level:'Intermediate'},
-  {id:'e25',name:'Plank',                 muscle:'Core',      equip:'Bodyweight', type:'Isometric',   level:'Beginner'},
-  {id:'e26',name:'Ab Wheel Rollout',      muscle:'Core',      equip:'Equipment',  type:'Strength',    level:'Advanced'},
-  {id:'e27',name:'Hanging Leg Raise',     muscle:'Core',      equip:'Bodyweight', type:'Strength',    level:'Intermediate'},
-  {id:'e28',name:'Cable Crunch',          muscle:'Core',      equip:'Cable',      type:'Isolation',   level:'Beginner'},
-  {id:'e29',name:'Burpee',                muscle:'Full Body', equip:'Bodyweight', type:'Cardio',      level:'Intermediate'},
-  {id:'e30',name:'Kettlebell Swing',      muscle:'Full Body', equip:'Kettlebell', type:'Cardio',      level:'Intermediate'},
-  {id:'e31',name:'Jump Rope',             muscle:'Full Body', equip:'Equipment',  type:'Cardio',      level:'Beginner'},
-  {id:'e32',name:'Mountain Climbers',     muscle:'Core',      equip:'Bodyweight', type:'Cardio',      level:'Beginner'},
+const LEVEL_COLORS: Record<string, string> = {
+  beginner:     '#26de81',
+  intermediate: '#FF9F43',
+  expert:       '#FF6B6B',
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  strength:              '#4A9EFF',
+  cardio:                '#FF6B6B',
+  stretching:            '#26de81',
+  plyometrics:           '#FF9F43',
+  powerlifting:          '#7B6FFF',
+  olympic_weightlifting: '#FFD700',
+};
+
+const FILTERS = [
+  { id:'all',                   label:'All'        },
+  { id:'strength',              label:'Strength'   },
+  { id:'cardio',                label:'Cardio'     },
+  { id:'stretching',            label:'Stretching' },
+  { id:'plyometrics',           label:'Plyometrics'},
+  { id:'powerlifting',          label:'Powerlifting'},
+  { id:'olympic_weightlifting', label:'Olympic'    },
 ];
 
-const MUSCLES = ['All','Chest','Back','Legs','Shoulders','Arms','Core','Full Body'];
-const EQUIPS  = ['All','Barbell','Dumbbell','Bodyweight','Cable','Machine','Kettlebell'];
-const lvlColor = l => l==='Beginner'?C.green:l==='Intermediate'?C.yellow:C.red;
-
-// ─── Exercise row in builder ───────────────────────────────────────────────────
-function BuilderRow({item, index, onRemove, onUpdate}) {
+// ─── Builder Row ──────────────────────────────────────────────────────────────
+function BuilderRow({
+  item, index, onRemove, onUpdate,
+}: {
+  item: any; index: number; onRemove: () => void; onUpdate: (u: any) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const color = CATEGORY_COLORS[item.exercise.category] || C.blue;
+
   return (
-    <View style={s.builderRow}>
-      {/* Header */}
-      <TouchableOpacity style={s.builderRowHead} onPress={()=>setOpen(o=>!o)} activeOpacity={0.8}>
-        <View style={s.indexBadge}><Text style={s.indexText}>{index+1}</Text></View>
-        <View style={{flex:1}}>
-          <Text style={s.builderName}>{item.exercise.name}</Text>
-          <Text style={s.builderMeta}>{item.exercise.muscle}  ·  {item.sets}×{item.reps}  ·  {item.rest}s rest</Text>
+    <View style={[styles.builderRow, { borderTopColor: color }]}>
+      <TouchableOpacity style={styles.builderRowHead} onPress={() => setOpen(o => !o)} activeOpacity={0.8}>
+        <View style={[styles.indexBadge, { backgroundColor: color + '33', borderColor: color }]}>
+          <Text style={[styles.indexText, { color }]}>{index + 1}</Text>
         </View>
-        <TouchableOpacity onPress={onRemove} style={s.removeBtn}>
-          <Text style={s.removeTxt}>✕</Text>
+        <View style={{ flex:1 }}>
+          <Text style={styles.builderName}>{item.exercise.name}</Text>
+          <Text style={styles.builderMeta}>
+            {item.exercise.primaryMuscles[0]}  ·  {item.sets}×{item.reps}  ·  {item.rest}s rest
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onRemove} style={styles.removeBtn}>
+          <Text style={styles.removeTxt}>✕</Text>
         </TouchableOpacity>
-        <Text style={s.chevron}>{open?'▲':'▼'}</Text>
+        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
-      {/* Expanded controls — same pattern as ExerciseDemo sets */}
       {open && (
-        <View style={s.builderExpanded}>
-          <View style={s.paramRow}>
-            {/* Sets */}
-            <View style={s.param}>
-              <Text style={s.paramLabel}>Sets</Text>
-              <View style={s.stepper}>
-                <TouchableOpacity style={s.stepBtn} onPress={()=>onUpdate({sets:Math.max(1,item.sets-1)})}>
-                  <Text style={s.stepBtnTxt}>−</Text>
+        <View style={styles.builderExpanded}>
+          <View style={styles.paramRow}>
+            <View style={styles.param}>
+              <Text style={styles.paramLabel}>Sets</Text>
+              <View style={styles.stepper}>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => onUpdate({ sets: Math.max(1, item.sets - 1) })}>
+                  <Text style={styles.stepBtnTxt}>−</Text>
                 </TouchableOpacity>
-                <Text style={s.stepVal}>{item.sets}</Text>
-                <TouchableOpacity style={s.stepBtn} onPress={()=>onUpdate({sets:Math.min(10,item.sets+1)})}>
-                  <Text style={s.stepBtnTxt}>＋</Text>
+                <Text style={styles.stepVal}>{item.sets}</Text>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => onUpdate({ sets: Math.min(10, item.sets + 1) })}>
+                  <Text style={styles.stepBtnTxt}>＋</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            {/* Reps */}
-            <View style={s.param}>
-              <Text style={s.paramLabel}>Reps</Text>
+            <View style={styles.param}>
+              <Text style={styles.paramLabel}>Reps</Text>
               <TextInput
-                style={s.paramInput}
+                style={styles.paramInput}
                 value={item.reps}
-                onChangeText={v=>onUpdate({reps:v})}
-                keyboardType="default"
+                onChangeText={v => onUpdate({ reps: v })}
                 placeholder="10"
                 placeholderTextColor={C.textSec}
               />
             </View>
-            {/* Rest */}
-            <View style={s.param}>
-              <Text style={s.paramLabel}>Rest (s)</Text>
-              <View style={s.stepper}>
-                <TouchableOpacity style={s.stepBtn} onPress={()=>onUpdate({rest:Math.max(0,item.rest-15)})}>
-                  <Text style={s.stepBtnTxt}>−</Text>
+            <View style={styles.param}>
+              <Text style={styles.paramLabel}>Rest (s)</Text>
+              <View style={styles.stepper}>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => onUpdate({ rest: Math.max(0, item.rest - 15) })}>
+                  <Text style={styles.stepBtnTxt}>−</Text>
                 </TouchableOpacity>
-                <Text style={s.stepVal}>{item.rest}</Text>
-                <TouchableOpacity style={s.stepBtn} onPress={()=>onUpdate({rest:item.rest+15})}>
-                  <Text style={s.stepBtnTxt}>＋</Text>
+                <Text style={styles.stepVal}>{item.rest}</Text>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => onUpdate({ rest: item.rest + 15 })}>
+                  <Text style={styles.stepBtnTxt}>＋</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
           <TextInput
-            style={s.notesInput}
-            placeholder="Notes (e.g. pause at bottom, grip cue)..."
+            style={styles.notesInput}
+            placeholder="Notes (e.g. pause at bottom)..."
             placeholderTextColor={C.textSec}
-            value={item.notes||''}
-            onChangeText={v=>onUpdate({notes:v})}
+            value={item.notes || ''}
+            onChangeText={v => onUpdate({ notes: v })}
             multiline
           />
         </View>
@@ -145,336 +124,378 @@ function BuilderRow({item, index, onRemove, onUpdate}) {
   );
 }
 
-// ─── Main Screen ───────────────────────────────────────────────────────────────
-export default function CreateWorkoutScreen({navigation}) {
-  const [name,    setName]    = useState('');
-  const [built,   setBuilt]   = useState([]);
-  const [tab,     setTab]     = useState('build');  // 'build' | 'browse'
-  const [search,  setSearch]  = useState('');
-  const [muscle,  setMuscle]  = useState('All');
-  const [equip,   setEquip]   = useState('All');
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+export default function CreateWorkoutScreen({ route, navigation }: any) {
+  const editWorkout = route?.params?.editWorkout ?? null;
+  const isEditing   = !!editWorkout;
 
-  const filtered = EXERCISES.filter(e =>
-    (muscle==='All'||e.muscle===muscle) &&
-    (equip==='All'||e.equip===equip) &&
-    e.name.toLowerCase().includes(search.toLowerCase())
+  // Pre-fill from existing workout when editing
+  const [name,      setName]      = useState(isEditing ? editWorkout.name : '');
+  const [built,     setBuilt]     = useState<any[]>(
+    isEditing
+      ? editWorkout.exercises.map((e: any) => ({
+          exercise: e.exercise,
+          sets:     e.sets,
+          reps:     e.reps,
+          rest:     e.rest,
+          notes:    e.notes || '',
+        }))
+      : []
   );
+  const [tab,       setTab]       = useState<'build' | 'browse'>('build');
+  const [saving,    setSaving]    = useState(false);
 
-  const addEx = (ex) => {
-    if (built.find(b=>b.exercise.id===ex.id)) {
-      Alert.alert('Already added',`${ex.name} is already in your workout.`);
+  const [query,     setQuery]     = useState('');
+  const [filter,    setFilter]    = useState('all');
+  const [results,   setResults]   = useState<Exercise[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const data = await exerciseDB.search('', 'all');
+      setResults(data);
+      setLoading(false);
+    })();
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      setSearching(true);
+      const data = await exerciseDB.search(query, filter);
+      setResults(data);
+      setSearching(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [query, filter]);
+
+  const addEx = (ex: Exercise) => {
+    if (built.find(b => b.exercise.id === ex.id)) {
+      Alert.alert('Already added', `${ex.name} is already in your workout.`);
       return;
     }
-    setBuilt(prev=>[...prev,{exercise:ex,sets:3,reps:'10',rest:60,notes:''}]);
+    setBuilt(prev => [...prev, { exercise: ex, sets: 3, reps: '10', rest: 60, notes: '' }]);
     setTab('build');
   };
 
-  const removeEx = id => setBuilt(prev=>prev.filter(b=>b.exercise.id!==id));
-  const updateEx = (id,upd) => setBuilt(prev=>prev.map(b=>b.exercise.id===id?{...b,...upd}:b));
+  const removeEx = (id: string) => setBuilt(prev => prev.filter(b => b.exercise.id !== id));
+  const updateEx = (id: string, upd: any) =>
+    setBuilt(prev => prev.map(b => b.exercise.id === id ? { ...b, ...upd } : b));
 
-  const totalSets = built.reduce((n,b)=>n+b.sets,0);
-  const estTime   = Math.round(built.reduce((n,b)=>n+(b.sets*(parseFloat(b.reps)||10)*3+b.sets*b.rest)/60,0));
+  const totalSets = built.reduce((n, b) => n + b.sets, 0);
+  const estTime   = Math.round(built.reduce((n, b) =>
+    n + (b.sets * (parseFloat(b.reps) || 10) * 3 + b.sets * b.rest) / 60, 0));
 
-  const save = () => {
-    if (!name.trim()) { Alert.alert('Name required','Give your workout a name.'); return; }
-    if (!built.length){ Alert.alert('No exercises','Add at least one exercise.'); return; }
-    Alert.alert('Saved! 🎉',`"${name}" has been added to your workouts.`,[
-      {text:'Done', onPress:()=>navigation.goBack()},
-    ]);
+  // ── Save / Update to AsyncStorage ──────────────────────────────────────────
+  const save = async () => {
+    if (!name.trim())  { Alert.alert('Name required', 'Give your workout a name.'); return; }
+    if (!built.length) { Alert.alert('No exercises', 'Add at least one exercise.'); return; }
+
+    setSaving(true);
+    try {
+      const payload = {
+        name,
+        exercises: built.map(b => ({
+          exercise: {
+            id:             b.exercise.id,
+            name:           b.exercise.name,
+            category:       b.exercise.category,
+            primaryMuscles: b.exercise.primaryMuscles,
+            level:          b.exercise.level,
+          },
+          sets:  b.sets,
+          reps:  b.reps,
+          rest:  b.rest,
+          notes: b.notes,
+        })),
+        totalSets,
+        estimatedTime: estTime,
+      };
+
+      if (isEditing) {
+        // Replace old entry: delete then re-save preserving original id/date would
+        // require a full update method — simplest is delete + save with new id
+        await workoutStorage.delete(editWorkout.id);
+      }
+      await workoutStorage.save(payload);
+
+      const msg = isEditing
+        ? `"${name}" has been updated.`
+        : `"${name}" has been saved to My Workouts.`;
+      Alert.alert(isEditing ? 'Updated! ✏️' : 'Saved! 🎉', msg, [
+        { text: 'Done', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e) {
+      Alert.alert('Error', 'Could not save workout. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderExercise = ({ item }: { item: Exercise }) => {
+    const color      = CATEGORY_COLORS[item.category] || C.blue;
+    const levelColor = LEVEL_COLORS[item.level] || C.blue;
+    const imageUrl   = exerciseDB.getImageUrl(item, 0);
+    const added      = built.some(b => b.exercise.id === item.id);
+
+    return (
+      <TouchableOpacity
+        style={[styles.exCard, { borderTopColor: color }, added && styles.exCardAdded]}
+        onPress={() => addEx(item)}
+        activeOpacity={0.7}
+      >
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.exCardImage} resizeMode="cover" />
+        ) : (
+          <View style={[styles.exCardImagePlaceholder, { backgroundColor: color + '22' }]}>
+            <Text style={{ fontSize:28 }}>💪</Text>
+          </View>
+        )}
+        <View style={styles.exCardInfo}>
+          <Text style={styles.exCardName} numberOfLines={1}>{item.name}</Text>
+          <View style={{ flexDirection:'row', alignItems:'center', gap:6, marginBottom:3 }}>
+            <Text style={[styles.exCardTag, { color }]}>{item.category}</Text>
+            <Text style={{ color:C.textMid, fontSize:14 }}>·</Text>
+            <Text style={[styles.exCardTag, { color: levelColor }]}>{item.level}</Text>
+          </View>
+          <Text style={styles.exCardMuscles} numberOfLines={1}>{item.primaryMuscles.join(', ')}</Text>
+        </View>
+        {added
+          ? <Text style={[styles.exCardAction, { color: C.green }]}>✓</Text>
+          : <Text style={[styles.exCardAction, { color }]}>＋</Text>
+        }
+      </TouchableOpacity>
+    );
   };
 
   return (
-    <View style={s.screen}>
+    <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
       {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={()=>navigation.goBack()} style={{width:64}}>
-          <Text style={s.backTxt}>← Back</Text>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ width:64 }}>
+          <Text style={styles.backTxt}>← Back</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>CREATE WORKOUT</Text>
-        <TouchableOpacity style={s.saveBtn} onPress={save}>
-          <Text style={s.saveTxt}>SAVE</Text>
+        <Text style={styles.headerTitle}>{isEditing ? 'EDIT WORKOUT' : 'CREATE WORKOUT'}</Text>
+        <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving}>
+          <Text style={styles.saveTxt}>{saving ? '...' : isEditing ? 'UPDATE' : 'SAVE'}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Name input */}
-      <View style={s.nameWrap}>
+      {/* Name */}
+      <View style={styles.nameWrap}>
         <TextInput
-          style={s.nameInput}
+          style={styles.nameInput}
           placeholder="Workout name..."
           placeholderTextColor={C.textSec}
           value={name}
           onChangeText={setName}
           maxLength={40}
         />
-        {built.length>0&&(
-          <View style={s.summaryRow}>
-            {[`💪 ${built.length}`,`📋 ${totalSets} sets`,`⏱ ~${estTime}m`].map(tag=>(
-              <View key={tag} style={s.summaryPill}>
-                <Text style={s.summaryPillTxt}>{tag}</Text>
+        {built.length > 0 && (
+          <View style={styles.summaryRow}>
+            {[`💪 ${built.length} exercises`, `📋 ${totalSets} sets`, `⏱ ~${estTime}m`].map(tag => (
+              <View key={tag} style={styles.summaryPill}>
+                <Text style={styles.summaryPillTxt}>{tag}</Text>
               </View>
             ))}
           </View>
         )}
       </View>
 
-      {/* Tab bar */}
-      <View style={s.tabBar}>
-        <TouchableOpacity style={[s.tab,tab==='build'&&s.tabActive]} onPress={()=>setTab('build')}>
-          <Text style={[s.tabTxt,tab==='build'&&s.tabTxtActive]}>
-            My Workout{built.length?` (${built.length})`:''}
+      {/* Tabs */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity style={[styles.tab, tab === 'build' && styles.tabActive]} onPress={() => setTab('build')}>
+          <Text style={[styles.tabTxt, tab === 'build' && styles.tabTxtActive]}>
+            My Workout{built.length ? ` (${built.length})` : ''}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[s.tab,tab==='browse'&&s.tabActive]} onPress={()=>setTab('browse')}>
-          <Text style={[s.tabTxt,tab==='browse'&&s.tabTxtActive]}>Browse Exercises</Text>
+        <TouchableOpacity style={[styles.tab, tab === 'browse' && styles.tabActive]} onPress={() => setTab('browse')}>
+          <Text style={[styles.tabTxt, tab === 'browse' && styles.tabTxtActive]}>Browse Exercises</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── BUILD TAB ── */}
-      {tab==='build'&&(
-        <ScrollView style={{flex:1}} contentContainerStyle={s.buildContent} showsVerticalScrollIndicator={false}>
-          {built.length===0
-            ?(
-              <View style={s.emptyBuild}>
-                <Text style={{fontSize:48,marginBottom:12}}>🏗</Text>
-                <Text style={s.emptyTitle}>No exercises yet</Text>
-                <Text style={s.emptySubtitle}>Tap "Browse Exercises" to add moves</Text>
-                <TouchableOpacity style={[s.blueBtn,{marginTop:20}]} onPress={()=>setTab('browse')}>
-                  <Text style={s.blueBtnTxt}>Browse Exercises →</Text>
-                </TouchableOpacity>
-              </View>
-            )
-            :(
-              <>
-                {built.map((item,i)=>(
-                  <BuilderRow
-                    key={item.exercise.id}
-                    item={item}
-                    index={i}
-                    onRemove={()=>removeEx(item.exercise.id)}
-                    onUpdate={upd=>updateEx(item.exercise.id,upd)}
-                  />
-                ))}
-                <TouchableOpacity style={s.addMoreBtn} onPress={()=>setTab('browse')}>
-                  <Text style={s.addMoreTxt}>＋  Add More Exercises</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.blueBtn} onPress={save}>
-                  <Text style={s.blueBtnTxt}>SAVE WORKOUT</Text>
-                </TouchableOpacity>
-              </>
-            )
-          }
+      {/* BUILD */}
+      {tab === 'build' && (
+        <ScrollView style={{ flex:1 }} contentContainerStyle={styles.buildContent} showsVerticalScrollIndicator={false}>
+          {built.length === 0 ? (
+            <View style={styles.emptyBuild}>
+              <Text style={{ fontSize:48, marginBottom:12 }}>🏗</Text>
+              <Text style={styles.emptyTitle}>No exercises yet</Text>
+              <Text style={styles.emptySubtitle}>Browse 800+ exercises to build your workout</Text>
+              <TouchableOpacity style={[styles.blueBtn, { marginTop:20 }]} onPress={() => setTab('browse')}>
+                <Text style={styles.blueBtnTxt}>Browse Exercises →</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {built.map((item, i) => (
+                <BuilderRow
+                  key={item.exercise.id}
+                  item={item}
+                  index={i}
+                  onRemove={() => removeEx(item.exercise.id)}
+                  onUpdate={upd => updateEx(item.exercise.id, upd)}
+                />
+              ))}
+              <TouchableOpacity style={styles.addMoreBtn} onPress={() => setTab('browse')}>
+                <Text style={styles.addMoreTxt}>＋  Add More Exercises</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.blueBtn} onPress={save} disabled={saving}>
+                <Text style={styles.blueBtnTxt}>{saving ? 'Saving...' : 'SAVE WORKOUT'}</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </ScrollView>
       )}
 
-      {/* ── BROWSE TAB ── */}
-      {tab==='browse'&&(
-        <View style={{flex:1}}>
-          {/* Search */}
-          <View style={s.searchWrap}>
-            <View style={s.searchBox}>
-              <Text style={{fontSize:16}}>🔍</Text>
-              <TextInput
-                style={s.searchInput}
-                placeholder="Search by name or muscle..."
-                placeholderTextColor={C.textSec}
-                value={search}
-                onChangeText={setSearch}
-              />
-              {!!search&&<TouchableOpacity onPress={()=>setSearch('')}><Text style={{color:C.textSec,fontSize:14}}>✕</Text></TouchableOpacity>}
-            </View>
+      {/* BROWSE */}
+      {tab === 'browse' && (
+        <View style={{ flex:1 }}>
+          <View style={styles.searchBar}>
+            <Text style={{ fontSize:18 }}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by name or muscle..."
+              placeholderTextColor={C.textMid}
+              value={query}
+              onChangeText={setQuery}
+              autoCorrect={false}
+            />
+            {(query.length > 0 || searching) && (
+              <TouchableOpacity onPress={() => setQuery('')}>
+                {searching
+                  ? <ActivityIndicator size="small" color={C.blue} />
+                  : <Text style={{ color:C.textSec, fontSize:16, fontWeight:'700', padding:4 }}>✕</Text>
+                }
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Muscle filter */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow} contentContainerStyle={{paddingHorizontal:16,paddingRight:24}}>
-            {MUSCLES.map(m=>(
-              <TouchableOpacity key={m} style={[s.chip,muscle===m&&s.chipOn]} onPress={()=>setMuscle(m)}>
-                <Text style={[s.chipTxt,muscle===m&&s.chipTxtOn]}>{m}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Equipment filter */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[s.filterRow,{marginTop:-4}]} contentContainerStyle={{paddingHorizontal:16,paddingRight:24}}>
-            {EQUIPS.map(e=>(
-              <TouchableOpacity key={e} style={[s.chipSm,equip===e&&s.chipSmOn]} onPress={()=>setEquip(e)}>
-                <Text style={[s.chipSmTxt,equip===e&&s.chipSmTxtOn]}>{e}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={s.resultCount}>{filtered.length} exercises</Text>
-
-          <FlatList
-            data={filtered}
-            keyExtractor={i=>i.id}
-            contentContainerStyle={{paddingHorizontal:16,paddingBottom:40}}
-            renderItem={({item})=>{
-              const added = built.some(b=>b.exercise.id===item.id);
-              return (
+          <View style={styles.filterBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
+              {FILTERS.map(f => (
                 <TouchableOpacity
-                  style={[s.exListRow, added&&s.exListRowAdded]}
-                  onPress={()=>addEx(item)}
-                  activeOpacity={0.8}
+                  key={f.id}
+                  style={[styles.filterPill, filter === f.id && styles.filterPillActive]}
+                  onPress={() => setFilter(f.id)}
                 >
-                  {/* Left accent bar — like Search screen rows */}
-                  <View style={[s.exListAccent,{backgroundColor:lvlColor(item.level)}]}/>
-                  <View style={s.exListBody}>
-                    <View style={{flex:1}}>
-                      <Text style={s.exListName}>{item.name}</Text>
-                      <View style={{flexDirection:'row',gap:8,marginTop:2}}>
-                        <Text style={s.blueXS}>{item.type}</Text>
-                        <Text style={[s.blueXS,{color:lvlColor(item.level)}]}>{item.level}</Text>
-                      </View>
-                      <Text style={s.greyXS}>{item.muscle}  ·  {item.equip}</Text>
-                    </View>
-                    <View style={[s.addBtn,added&&s.addBtnAdded]}>
-                      <Text style={[s.addBtnTxt,added&&{color:C.green}]}>{added?'✓':'＋'}</Text>
-                    </View>
-                  </View>
+                  <Text style={filter === f.id ? styles.filterTextActive : styles.filterText}>{f.label}</Text>
                 </TouchableOpacity>
-              );
-            }}
-            ListEmptyComponent={
-              <View style={{alignItems:'center',paddingVertical:40}}>
-                <Text style={{color:C.white,fontWeight:'600',fontSize:15}}>No exercises found</Text>
-                <Text style={{color:C.textSec,fontSize:13,marginTop:4}}>Try clearing filters</Text>
-              </View>
-            }
-          />
+              ))}
+            </ScrollView>
+          </View>
+
+          <Text style={styles.resultsCount}>
+            {loading ? 'Loading...' : `${results.length} EXERCISES  ·  TAP TO ADD`}
+          </Text>
+
+          {loading ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color={C.blue} />
+              <Text style={{ color:C.textSec, marginTop:12, fontSize:14 }}>Loading 800+ exercises...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={results}
+              renderItem={renderExercise}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{ padding:16, paddingBottom:60 }}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
         </View>
       )}
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  screen:     {flex:1,backgroundColor:C.bg},
+const styles = StyleSheet.create({
+  screen:   { flex:1, backgroundColor:C.bg },
+  centered: { flex:1, justifyContent:'center', alignItems:'center', paddingTop:60 },
 
   header: {
-    flexDirection:'row',alignItems:'center',justifyContent:'space-between',
-    paddingTop:Platform.OS==='ios'?54:36,paddingBottom:12,paddingHorizontal:16,
+    flexDirection:'row', alignItems:'center', justifyContent:'space-between',
+    paddingTop: Platform.OS === 'ios' ? 54 : 36,
+    paddingBottom:12, paddingHorizontal:16,
+    backgroundColor:C.card, borderBottomWidth:1, borderBottomColor:C.border,
   },
-  backTxt:    {color:C.blue,fontSize:15,fontWeight:'500'},
-  headerTitle:{color:C.white,fontSize:18,fontWeight:'700',letterSpacing:1.5},
-  saveBtn:    {backgroundColor:C.blue,borderRadius:10,paddingHorizontal:16,paddingVertical:7},
-  saveTxt:    {color:C.white,fontWeight:'700',fontSize:13,letterSpacing:1},
+  backTxt:     { color:C.blue, fontSize:15, fontWeight:'500' },
+  headerTitle: { color:C.white, fontSize:18, fontWeight:'700', letterSpacing:1.5 },
+  saveBtn:     { backgroundColor:C.blue, borderRadius:10, paddingHorizontal:16, paddingVertical:7 },
+  saveTxt:     { color:C.white, fontWeight:'700', fontSize:13, letterSpacing:1 },
 
-  // Name area
   nameWrap: {
-    backgroundColor:C.card,paddingHorizontal:16,paddingVertical:12,
-    borderBottomWidth:1,borderBottomColor:C.border,
+    backgroundColor:C.card, paddingHorizontal:16, paddingVertical:12,
+    borderBottomWidth:1, borderBottomColor:C.border,
   },
   nameInput: {
-    fontSize:18,fontWeight:'700',color:C.white,
-    paddingVertical:4,borderBottomWidth:2,borderBottomColor:C.blue,
+    fontSize:18, fontWeight:'700', color:C.white,
+    paddingVertical:4, borderBottomWidth:2, borderBottomColor:C.blue,
   },
-  summaryRow:     {flexDirection:'row',gap:8,marginTop:10,flexWrap:'wrap'},
-  summaryPill:    {backgroundColor:'rgba(0,123,255,0.15)',borderRadius:20,paddingHorizontal:10,paddingVertical:4,borderWidth:1,borderColor:'rgba(0,123,255,0.25)'},
-  summaryPillTxt: {color:C.lightBlue,fontSize:12,fontWeight:'600'},
+  summaryRow:     { flexDirection:'row', gap:8, marginTop:10, flexWrap:'wrap' },
+  summaryPill:    { backgroundColor:'rgba(74,158,255,0.15)', borderRadius:20, paddingHorizontal:10, paddingVertical:4, borderWidth:1, borderColor:'rgba(74,158,255,0.3)' },
+  summaryPillTxt: { color:C.blue, fontSize:12, fontWeight:'600' },
 
-  // Tabs — match Community screen
-  tabBar:     {flexDirection:'row',backgroundColor:C.card,borderBottomWidth:1,borderBottomColor:C.border},
-  tab:        {flex:1,paddingVertical:13,alignItems:'center'},
-  tabActive:  {borderBottomWidth:2,borderBottomColor:C.blue},
-  tabTxt:     {fontSize:14,fontWeight:'600',color:C.textSec},
-  tabTxtOn:   {},
-  tabTxtActive:{color:C.white},
+  tabBar:       { flexDirection:'row', backgroundColor:C.card, borderBottomWidth:1, borderBottomColor:C.border },
+  tab:          { flex:1, paddingVertical:13, alignItems:'center' },
+  tabActive:    { borderBottomWidth:2, borderBottomColor:C.blue },
+  tabTxt:       { fontSize:14, fontWeight:'600', color:C.textSec },
+  tabTxtActive: { color:C.white },
 
-  // Build tab
-  buildContent: {padding:16,paddingBottom:40},
-  emptyBuild:   {alignItems:'center',paddingVertical:60},
-  emptyTitle:   {color:C.white,fontSize:17,fontWeight:'700'},
-  emptySubtitle:{color:C.textSec,fontSize:13,textAlign:'center',marginTop:6,paddingHorizontal:30},
+  buildContent:  { padding:16, paddingBottom:40 },
+  emptyBuild:    { alignItems:'center', paddingVertical:60 },
+  emptyTitle:    { color:C.white, fontSize:17, fontWeight:'700', marginBottom:6 },
+  emptySubtitle: { color:C.textSec, fontSize:13, textAlign:'center', paddingHorizontal:30 },
 
-  blueBtn:    {backgroundColor:C.blue,borderRadius:10,paddingVertical:14,alignItems:'center'},
-  blueBtnTxt: {color:C.white,fontWeight:'700',fontSize:15,letterSpacing:0.8},
+  blueBtn:    { backgroundColor:C.blue, borderRadius:10, paddingVertical:14, alignItems:'center' },
+  blueBtnTxt: { color:C.white, fontWeight:'700', fontSize:15, letterSpacing:0.8 },
 
-  // Builder row — matches ExerciseDemo set rows
   builderRow: {
-    backgroundColor:C.card,borderRadius:12,marginBottom:10,
-    overflow:'hidden',borderWidth:1,borderColor:C.border,
+    backgroundColor:C.card, borderRadius:12, marginBottom:10, overflow:'hidden',
+    borderTopWidth:3, borderLeftWidth:1, borderRightWidth:1, borderBottomWidth:1,
+    borderLeftColor:C.border, borderRightColor:C.border, borderBottomColor:C.border,
   },
-  builderRowHead: {flexDirection:'row',alignItems:'center',padding:12,gap:10},
-  indexBadge:     {width:28,height:28,borderRadius:8,backgroundColor:C.blue,alignItems:'center',justifyContent:'center'},
-  indexText:      {color:C.white,fontWeight:'700',fontSize:13},
-  builderName:    {color:C.white,fontSize:14,fontWeight:'600'},
-  builderMeta:    {color:C.textSec,fontSize:11,marginTop:2},
-  removeBtn:      {width:26,height:26,borderRadius:6,backgroundColor:'rgba(220,53,69,0.15)',alignItems:'center',justifyContent:'center'},
-  removeTxt:      {color:C.red,fontSize:12,fontWeight:'700'},
-  chevron:        {color:C.textSec,fontSize:12,marginLeft:4},
+  builderRowHead:  { flexDirection:'row', alignItems:'center', padding:12, gap:10 },
+  indexBadge:      { width:28, height:28, borderRadius:8, borderWidth:1, alignItems:'center', justifyContent:'center' },
+  indexText:       { fontWeight:'700', fontSize:13 },
+  builderName:     { color:C.white, fontSize:14, fontWeight:'600' },
+  builderMeta:     { color:C.textSec, fontSize:11, marginTop:2, textTransform:'capitalize' },
+  removeBtn:       { width:26, height:26, borderRadius:6, backgroundColor:'rgba(255,107,107,0.15)', alignItems:'center', justifyContent:'center' },
+  removeTxt:       { color:C.red, fontSize:12, fontWeight:'700' },
+  chevron:         { color:C.textSec, fontSize:12, marginLeft:4 },
+  builderExpanded: { borderTopWidth:1, borderTopColor:C.border, padding:12, backgroundColor:'rgba(255,255,255,0.02)' },
+  paramRow:        { flexDirection:'row', gap:10, marginBottom:12 },
+  param:           { flex:1, alignItems:'center', gap:6 },
+  paramLabel:      { color:C.textSec, fontSize:11, fontWeight:'600', letterSpacing:0.5 },
+  stepper:         { flexDirection:'row', alignItems:'center', gap:6 },
+  stepBtn:         { width:28, height:28, borderRadius:8, backgroundColor:'rgba(74,158,255,0.15)', alignItems:'center', justifyContent:'center' },
+  stepBtnTxt:      { color:C.blue, fontSize:16, fontWeight:'700', lineHeight:20 },
+  stepVal:         { color:C.white, fontSize:16, fontWeight:'700', minWidth:24, textAlign:'center' },
+  paramInput:      { borderWidth:1.5, borderColor:'rgba(74,158,255,0.3)', borderRadius:8, paddingHorizontal:10, paddingVertical:4, fontSize:15, fontWeight:'700', color:C.white, textAlign:'center', width:56 },
+  notesInput:      { borderWidth:1, borderColor:C.border, borderRadius:8, padding:10, fontSize:13, color:C.white, minHeight:36, backgroundColor:'rgba(255,255,255,0.03)' },
+  addMoreBtn:      { borderWidth:1.5, borderColor:C.blue, borderRadius:10, paddingVertical:12, alignItems:'center', marginBottom:12, borderStyle:'dashed' },
+  addMoreTxt:      { color:C.blue, fontWeight:'700', fontSize:14 },
 
-  builderExpanded:{borderTopWidth:1,borderTopColor:C.border,padding:12,backgroundColor:'rgba(255,255,255,0.02)'},
-  paramRow:       {flexDirection:'row',gap:10,marginBottom:12},
-  param:          {flex:1,alignItems:'center',gap:6},
-  paramLabel:     {color:C.textSec,fontSize:11,fontWeight:'600',letterSpacing:0.5},
-  stepper:        {flexDirection:'row',alignItems:'center',gap:6},
-  stepBtn:        {width:28,height:28,borderRadius:8,backgroundColor:'rgba(0,123,255,0.15)',alignItems:'center',justifyContent:'center'},
-  stepBtnTxt:     {color:C.lightBlue,fontSize:16,fontWeight:'700',lineHeight:20},
-  stepVal:        {color:C.white,fontSize:16,fontWeight:'700',minWidth:24,textAlign:'center'},
-  paramInput: {
-    borderWidth:1.5,borderColor:'rgba(0,123,255,0.3)',borderRadius:8,
-    paddingHorizontal:10,paddingVertical:4,fontSize:15,fontWeight:'700',
-    color:C.white,textAlign:'center',width:56,
-  },
-  notesInput: {
-    borderWidth:1,borderColor:C.border,borderRadius:8,padding:10,
-    fontSize:13,color:C.white,minHeight:36,
-    backgroundColor:'rgba(255,255,255,0.04)',
-  },
+  searchBar:       { flexDirection:'row', alignItems:'center', backgroundColor:C.card, paddingHorizontal:16, paddingVertical:10, borderBottomWidth:1, borderBottomColor:C.border, gap:10 },
+  searchInput:     { flex:1, color:C.white, fontSize:16, paddingVertical:6 },
+  filterBar:       { backgroundColor:C.card, borderBottomWidth:1, borderBottomColor:C.border },
+  filterContent:   { flexDirection:'row', paddingHorizontal:16, paddingVertical:12, gap:8 },
+  filterPill:      { paddingHorizontal:14, paddingVertical:8, borderRadius:20, backgroundColor:C.border },
+  filterPillActive:{ backgroundColor:C.blue },
+  filterText:      { color:C.textSec, fontSize:13, fontWeight:'700' },
+  filterTextActive:{ color:C.white, fontSize:13, fontWeight:'700' },
+  resultsCount:    { color:C.textMid, fontSize:11, fontWeight:'700', letterSpacing:2, paddingHorizontal:16, paddingTop:12, paddingBottom:4 },
 
-  addMoreBtn: {
-    borderWidth:1.5,borderColor:C.blue,borderRadius:10,
-    paddingVertical:12,alignItems:'center',marginBottom:12,
-    borderStyle:'dashed',
-  },
-  addMoreTxt: {color:C.blue,fontWeight:'700',fontSize:14},
-
-  // Browse tab
-  searchWrap:   {backgroundColor:C.card,paddingHorizontal:16,paddingVertical:10},
-  searchBox: {
-    flexDirection:'row',alignItems:'center',gap:8,
-    backgroundColor:'rgba(255,255,255,0.06)',borderRadius:10,
-    borderWidth:1,borderColor:C.border,paddingHorizontal:12,paddingVertical:9,
-  },
-  searchInput:  {flex:1,color:C.white,fontSize:14,padding:0},
-
-  filterRow:    {backgroundColor:C.card,paddingVertical:8},
-  chip: {
-    marginRight:8,paddingHorizontal:14,paddingVertical:6,
-    borderRadius:20,backgroundColor:'rgba(255,255,255,0.06)',
-    borderWidth:1,borderColor:'rgba(74,144,226,0.25)',
-  },
-  chipOn:       {backgroundColor:C.blue,borderColor:C.blue},
-  chipTxt:      {color:C.textSec,fontSize:13,fontWeight:'600'},
-  chipTxtOn:    {color:C.white},
-
-  chipSm:       {marginRight:6,paddingHorizontal:10,paddingVertical:4,borderRadius:16,borderWidth:1,borderColor:'rgba(255,255,255,0.12)'},
-  chipSmOn:     {borderColor:C.lightBlue,backgroundColor:'rgba(74,144,226,0.12)'},
-  chipSmTxt:    {color:C.textSec,fontSize:11,fontWeight:'600'},
-  chipSmTxtOn:  {color:C.lightBlue},
-
-  resultCount:  {color:C.textSec,fontSize:12,fontWeight:'600',paddingHorizontal:16,paddingVertical:6},
-
-  // Exercise list rows — same as Search/Exercise screen
-  exListRow: {
-    flexDirection:'row',backgroundColor:C.card,borderRadius:10,
-    marginBottom:8,overflow:'hidden',borderWidth:1,borderColor:C.border,
-  },
-  exListRowAdded: {borderColor:C.green,backgroundColor:'rgba(40,167,69,0.06)'},
-  exListAccent:   {width:4,alignSelf:'stretch'},
-  exListBody:     {flex:1,flexDirection:'row',alignItems:'center',padding:12,gap:10},
-  exListName:     {color:C.white,fontSize:14,fontWeight:'600'},
-  blueXS:         {color:C.lightBlue,fontSize:12,fontWeight:'600'},
-  greyXS:         {color:C.textSec,fontSize:11,marginTop:2},
-  addBtn: {
-    width:30,height:30,borderRadius:8,
-    backgroundColor:'rgba(0,123,255,0.15)',
-    borderWidth:1.5,borderColor:C.blue,
-    alignItems:'center',justifyContent:'center',
-  },
-  addBtnAdded:    {backgroundColor:'rgba(40,167,69,0.15)',borderColor:C.green},
-  addBtnTxt:      {color:C.blue,fontSize:18,fontWeight:'700',lineHeight:22},
+  exCard:                 { flexDirection:'row', alignItems:'center', backgroundColor:C.card, borderRadius:16, marginBottom:12, borderTopWidth:3, elevation:4, overflow:'hidden' },
+  exCardAdded:            { opacity:0.55 },
+  exCardImage:            { width:80, height:80 },
+  exCardImagePlaceholder: { width:80, height:80, alignItems:'center', justifyContent:'center' },
+  exCardInfo:             { flex:1, padding:12 },
+  exCardName:             { color:C.white, fontSize:15, fontWeight:'800', marginBottom:4 },
+  exCardTag:              { fontSize:11, fontWeight:'700', textTransform:'capitalize' },
+  exCardMuscles:          { color:C.textSec, fontSize:12, textTransform:'capitalize' },
+  exCardAction:           { fontSize:24, fontWeight:'700', paddingRight:14 },
 });

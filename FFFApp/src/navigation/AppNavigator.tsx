@@ -15,7 +15,9 @@ import HealthScreen from '../screens/HealthScreen';
 import ExerciseScreen from '../screens/ExerciseScreen';
 import { ExerciseDetailScreen } from '../screens/ExerciseDetailScreen';
 import { ExerciseProgressScreen } from '../screens/ExerciseProgressScreen';
+import MyWorkoutsScreen from '../screens/MyWorkoutsScreen';
 import { CompleteWorkoutScreen } from '../screens/CompleteWorkoutScreen';
+import { NutritionGoalsScreen } from '../screens/NutritionGoalsScreen';
 import { NutritionScreen } from '../screens/NutritionScreen';
 import { AddFoodScreen } from '../screens/AddFoodScreen';
 import { CommunityScreen } from '../screens/CommunityScreen';
@@ -25,6 +27,9 @@ import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ProgressChartsScreen } from '../screens/ProgressChartsScreen';
 import { WeeklyNutritionScreen } from '../screens/WeeklyNutritionScreen';
 import { WorkoutTemplatesScreen } from '../screens/WorkoutTemplatesScreen';
+import CreateWorkoutScreen from '../screens/CreateWorkoutScreen';
+import PlansScreen    from '../screens/PlansScreen';
+import MyPlansScreen  from '../screens/MyPlansScreen';
 
 // Navigation Setup
 const Stack = createStackNavigator();
@@ -134,11 +139,17 @@ export const AppNavigator = () => {
             <Stack.Screen name="ExerciseProgress" component={ExerciseProgressScreen} />
             <Stack.Screen name="CompleteWorkout" component={CompleteWorkoutScreen} />
             <Stack.Screen name="WorkoutTemplates" component={WorkoutTemplatesScreen} />
+            <Stack.Screen name="CreateWorkoutScreen" component={CreateWorkoutScreen} />
+            <Stack.Screen name="MyWorkoutsScreen" component={MyWorkoutsScreen} />
+            <Stack.Screen name="PlansScreen"    component={PlansScreen} />
+            <Stack.Screen name="MyPlansScreen"  component={MyPlansScreen} />
 
             {/* Nutrition Flow */}
             <Stack.Screen name="Nutrition" component={NutritionScreen} />
             <Stack.Screen name="AddFood" component={AddFoodScreen} />
             <Stack.Screen name="WeeklyNutrition" component={WeeklyNutritionScreen} />
+            <Stack.Screen name="NutritionGoals" component={NutritionGoalsScreen} />
+
 
             {/* Community & Social */}
             <Stack.Screen name="Community" component={CommunityScreen} />

@@ -43,6 +43,18 @@ const nutritionSchema = new mongoose.Schema({
     type: Number,
     default: 2000
   },
+  totalProtein: {
+    type: Number,
+    default: 0
+  },
+  totalCarbs: {
+    type: Number,
+    default: 0
+  },
+  totalFat: {
+    type: Number,
+    default: 0
+  },
   waterIntake: {
     type: Number,
     default: 0
@@ -57,14 +69,15 @@ const nutritionSchema = new mongoose.Schema({
 nutritionSchema.methods.calculateTotalCalories = function() {
   const allFoods = [
     ...(this.breakfast || []),
-    ...(this.lunch || []),
-    ...(this.dinner || []),
-    ...(this.snacks || [])
+    ...(this.lunch     || []),
+    ...(this.dinner    || []),
+    ...(this.snacks    || []),
   ];
-  
-  this.totalCalories = allFoods.reduce((total, food) => {
-    return total + (food.calories || 0);
-  }, 0);
+
+  this.totalCalories = allFoods.reduce((sum, food) => sum + (food.calories || 0), 0);
+  this.totalProtein  = allFoods.reduce((sum, food) => sum + (food.protein  || 0), 0);
+  this.totalCarbs    = allFoods.reduce((sum, food) => sum + (food.carbs    || 0), 0);
+  this.totalFat      = allFoods.reduce((sum, food) => sum + (food.fat      || 0), 0);
 };
 
 module.exports = mongoose.model('Nutrition', nutritionSchema);

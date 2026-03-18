@@ -1,114 +1,179 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { nutritionAPI, profileAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useDailyQuote } from '../hooks/useDailyQuote';
+import { workoutHistory } from '../services/workoutStorage';
+import { planStorage, SubscribedPlan, getTodaySession } from '../services/planStorage';
 
 export const DashboardScreen = ({ navigation }: any) => {
   const { user } = useAuth();
-  const quote = useDailyQuote(); // pulls today's inspirational quote (cached per day)
+  const quote    = useDailyQuote();
 
-  const [loading, setLoading] = useState(false);
-  // Aggregated stats shown in the Today's Summary card
-  const [todaySummary, setTodaySummary] = useState({ workouts: 0, calories: 0, posts: 0 });
+  const [loading,        setLoading]        = useState(false);
+  const [plan,           setPlan]           = useState<SubscribedPlan | null>(null);
+  const [workoutDone,    setWorkoutDone]    = useState(false);
+  const [calories,       setCalories]       = useState<number | null>(null);
 
-  // Load summary data on first render
-  useEffect(() => {
-    loadTodaySummary();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadDay();
+    }, [user?.id])
+  );
 
-  // Fetches today's nutrition and overall profile stats in parallel
-  const loadTodaySummary = async () => {
+  const loadDay = async () => {
+    setLoading(true);
     try {
-      if (!user?.id) return;
-      setLoading(true);
-      const today = new Date().toISOString().split('T')[0]; // format: YYYY-MM-DD
+      const today = new Date().toISOString().split('T')[0];
 
-      // Run both API calls simultaneously to avoid sequential waiting
-      const [nutritionData, statsData] = await Promise.all([
-        nutritionAPI.getNutrition(user.id, today).catch(() => null), // null if no log exists for today
-        profileAPI.getStats(user.id).catch(() => null)
+      const [plans, history] = await Promise.all([
+        planStorage.getSubscribed(),
+        workoutHistory.getAll(),
       ]);
 
-      setTodaySummary({
-        workouts: statsData?.workoutCount || 0,
-        calories: nutritionData?.totalCalories || 0,
-        posts:    statsData?.postCount || 0
-      });
-    } catch (error) {} finally { setLoading(false); }
+      setPlan(plans[0] ?? null);
+      setWorkoutDone(history.some(h => h.completedAt.startsWith(today)));
+
+      if (user?.id) {
+        const nutritionData = await nutritionAPI.getNutrition(user.id, today).catch(() => null);
+        setCalories(nutritionData?.totalCalories ?? null);
+      }
+    } catch {
+      // keep previous values
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Navigation tiles for the four main feature areas
-  const tiles = [
-    { id: 1, title: 'My Health',  icon: '❤️',  screen: 'Health',    color: '#FF6B6B' },
-    { id: 2, title: 'Exercise',   icon: '💪',  screen: 'Exercise',  color: '#4ECDC4' },
-    { id: 3, title: 'Nutrition',  icon: '🍎',  screen: 'Nutrition', color: '#FF9F43' },
-    { id: 4, title: 'Community',  icon: '👥',  screen: 'Community', color: '#4A9EFF' },
-  ];
+  const todaySession = plan ? getTodaySession(plan) : null;
 
-  // Stats displayed in the Today's Summary card — each is tappable and navigates to its screen
-  const summaryItems = [
-    { value: todaySummary.workouts, label: 'Workouts', screen: 'Exercise',  color: '#4ECDC4' },
-    { value: todaySummary.calories, label: 'Calories', screen: 'Nutrition', color: '#FF9F43' },
-    { value: todaySummary.posts,    label: 'Posts',    screen: 'Community', color: '#4A9EFF' },
+  const tiles = [
+    { id:1, title:'My Health',  icon:'❤️',  screen:'Health',    color:'#FF6B6B' },
+    { id:2, title:'Exercise',   icon:'💪',  screen:'Exercise',  color:'#4ECDC4' },
+    { id:3, title:'Nutrition',  icon:'🍎',  screen:'Nutrition', color:'#FF9F43' },
+    { id:4, title:'Community',  icon:'👥',  screen:'Community', color:'#4A9EFF' },
   ];
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* ── Personalised Greeting ── */}
+        {/* Greeting */}
         <View style={styles.greeting}>
           <Text style={styles.greetingText}>Welcome back,</Text>
-          {/* Falls back to 'Athlete' if username isn't loaded yet */}
           <Text style={styles.greetingName}>{user?.username || 'Athlete'} 👋</Text>
         </View>
 
-        {/* ── Daily Quote Card ── */}
+        {/* Daily Quote */}
         <View style={styles.verseCard}>
           <Text style={styles.verseLabel}>💬  DAILY QUOTE</Text>
           <Text style={styles.verseText}>"{quote.text}"</Text>
           <Text style={styles.verseReference}>— {quote.author}</Text>
         </View>
 
-        {/* ── Today's Summary Card ── */}
+        {/* Today's Summary */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <Text style={styles.summaryTitle}>TODAY'S SUMMARY</Text>
-            {/* Displays today's date in short format, e.g. "Mon 3 Mar" */}
             <Text style={styles.summaryDate}>
-              {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+              {new Date().toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })}
             </Text>
           </View>
-          {/* Show spinner while data loads, then render the stats grid */}
+
           {loading ? (
-            <ActivityIndicator size="small" color="#4A9EFF" style={{ paddingVertical: 16 }} />
+            <ActivityIndicator size="small" color="#4A9EFF" style={{ paddingVertical: 20 }} />
           ) : (
-            <View style={styles.summaryGrid}>
-              {summaryItems.map((item, i) => (
-                <React.Fragment key={item.label}>
-                  {/* Each stat navigates to its related screen when tapped */}
-                  <TouchableOpacity
-                    style={styles.summaryItem}
-                    onPress={() => navigation.navigate(item.screen)}
-                  >
-                    <Text style={[styles.summaryValue, { color: item.color }]}>{item.value}</Text>
-                    <Text style={styles.summaryLabel}>{item.label}</Text>
-                  </TouchableOpacity>
-                  {/* Vertical divider between stats, skipped after the last item */}
-                  {i < summaryItems.length - 1 && <View style={styles.summaryDivider} />}
-                </React.Fragment>
-              ))}
+            <View style={styles.actionRows}>
+
+              {/* ── Workout row ── */}
+              <TouchableOpacity
+                style={[styles.actionRow, styles.actionRowBorder]}
+                activeOpacity={0.75}
+                onPress={() => {
+                  if (workoutDone) {
+                    // Completed → My Workouts > Completed tab
+                    navigation.navigate('MyWorkoutsScreen', { tab: 'completed' });
+                  } else {
+                    // Everything else → Exercise screen
+                    navigation.navigate('Exercise');
+                  }
+                }}
+              >
+                <View style={styles.actionRowLeft}>
+                  <Text style={styles.actionRowEmoji}>
+                    {!plan ? '💪' : todaySession ? '💪' : '💤'}
+                  </Text>
+                  <View style={{flex:1}}>
+                    <Text style={styles.actionRowLabel}>WORKOUT</Text>
+                    <Text style={styles.actionRowValue} numberOfLines={1}>
+                      {workoutDone
+                        ? (todaySession ?? 'Workout')
+                        : !plan
+                          ? 'No plan active'
+                          : todaySession
+                            ? todaySession
+                            : 'Active rest day'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Right icon */}
+                {workoutDone ? (
+                  // Green tick — completed
+                  <View style={styles.doneCircle}>
+                    <Text style={styles.doneCircleTxt}>✓</Text>
+                  </View>
+                ) : !plan ? (
+                  // No plan — plus to go create/browse
+                  <View style={styles.addCircleBlue}>
+                    <Text style={styles.addCircleBlueTxt}>＋</Text>
+                  </View>
+                ) : todaySession ? (
+                  // Plan + session today — play button
+                  <View style={styles.playCircle}>
+                    <Text style={styles.playCircleTxt}>▶</Text>
+                  </View>
+                ) : (
+                  // Plan + rest day — zzz indicator
+                  <View style={styles.restCircle}>
+                    <Text style={styles.restCircleTxt}>💤</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* ── Nutrition row ── */}
+              <View style={[styles.actionRow, styles.actionRowBorder]}>
+                <View style={styles.actionRowLeft}>
+                  <Text style={styles.actionRowEmoji}>🍎</Text>
+                  <View>
+                    <Text style={styles.actionRowLabel}>NUTRITION</Text>
+                    <Text style={styles.actionRowValue}>
+                      {calories !== null ? `${calories} kcal logged` : 'Not logged yet'}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.addCircle}
+                  onPress={() => navigation.navigate('Nutrition')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.addCircleTxt}>＋</Text>
+                </TouchableOpacity>
+              </View>
+
+
+
             </View>
           )}
         </View>
 
-        {/* ── Main Feature Tiles (2-column grid) ── */}
+        {/* Feature Tiles */}
         <View style={styles.grid}>
-          {tiles.map((tile) => (
+          {tiles.map(tile => (
             <TouchableOpacity
               key={tile.id}
-              style={[styles.tile, { borderTopColor: tile.color }]} // each tile has its own accent colour
+              style={[styles.tile, { borderTopColor: tile.color }]}
               onPress={() => navigation.navigate(tile.screen)}
               activeOpacity={0.7}
             >
@@ -118,7 +183,7 @@ export const DashboardScreen = ({ navigation }: any) => {
           ))}
         </View>
 
-        {/* ── Progress Charts Banner ── */}
+        {/* Progress Charts */}
         <TouchableOpacity
           style={styles.progressCard}
           onPress={() => navigation.navigate('ProgressCharts')}
@@ -139,96 +204,84 @@ export const DashboardScreen = ({ navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a1628' },
-  content: { padding: 16, paddingBottom: 40 },
+  content:   { padding: 16, paddingBottom: 40 },
 
-  greeting: { marginBottom: 20, paddingTop: 8 },
+  greeting:     { marginBottom: 20, paddingTop: 8 },
   greetingText: { color: '#5a7fa8', fontSize: 14, letterSpacing: 0.5 },
   greetingName: { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 2 },
 
   verseCard: {
-    backgroundColor: '#0d1f3c',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderLeftWidth: 3,
-    borderLeftColor: '#4A9EFF',
+    backgroundColor: '#0d1f3c', borderRadius: 16, padding: 18, marginBottom: 14,
+    borderLeftWidth: 3, borderLeftColor: '#4A9EFF',
   },
-  verseLabel: { color: '#4A9EFF', fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 8 },
-  verseText: { color: '#c8d8f0', fontSize: 14, fontStyle: 'italic', lineHeight: 22, marginBottom: 8 },
+  verseLabel:     { color: '#4A9EFF', fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 8 },
+  verseText:      { color: '#c8d8f0', fontSize: 14, fontStyle: 'italic', lineHeight: 22, marginBottom: 8 },
   verseReference: { color: '#4A9EFF', fontSize: 12, fontWeight: '600', textAlign: 'right' },
 
+  // Summary card
   summaryCard: {
-    backgroundColor: '#0d1f3c',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderTopWidth: 3,
-    borderTopColor: '#7B6FFF',
+    backgroundColor: '#0d1f3c', borderRadius: 16, marginBottom: 14,
+    borderTopWidth: 3, borderTopColor: '#7B6FFF', overflow: 'hidden',
   },
-  summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  summaryHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12,
+  },
   summaryTitle: { color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 1.5 },
-  summaryDate: { color: '#5a7fa8', fontSize: 12 },
-  summaryGrid: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  summaryItem: { alignItems: 'center', flex: 1 },
-  summaryValue: { fontSize: 28, fontWeight: '800', marginBottom: 4 },
-  summaryLabel: { color: '#5a7fa8', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  summaryDivider: { width: 1, height: 40, backgroundColor: '#1a3a6b' },
+  summaryDate:  { color: '#5a7fa8', fontSize: 12 },
 
-  // 2-column tile grid
+  // Action rows
+  actionRows: {},
+  actionRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 18, paddingVertical: 14,
+  },
+  actionRowBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(26,58,107,0.7)' },
+  actionRowLeft:   { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  actionRowEmoji:  { fontSize: 24, width: 30, textAlign: 'center' },
+  actionRowLabel:  { color: '#5a7fa8', fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 3 },
+  actionRowValue:  { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  // Action buttons
+  playCircle:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(74,158,255,0.2)', borderWidth: 1.5, borderColor: '#4A9EFF', alignItems: 'center', justifyContent: 'center' },
+  playCircleTxt: { color: '#4A9EFF', fontSize: 14, marginLeft: 2 },
+
+  doneCircle:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(38,222,129,0.15)', borderWidth: 1.5, borderColor: '#26de81', alignItems: 'center', justifyContent: 'center' },
+  doneCircleTxt: { color: '#26de81', fontSize: 18, fontWeight: '800' },
+
+  ghostCircle:    { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#1a3a6b', alignItems: 'center', justifyContent: 'center' },
+  ghostCircleTxt: { color: '#5a7fa8', fontSize: 20 },
+
+  addCircleBlue:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(74,158,255,0.15)', borderWidth: 1.5, borderColor: '#4A9EFF', alignItems: 'center', justifyContent: 'center' },
+  addCircleBlueTxt: { color: '#4A9EFF', fontSize: 22, fontWeight: '300', lineHeight: 26 },
+
+  restCircle:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(90,127,168,0.15)', borderWidth: 1, borderColor: '#5a7fa8', alignItems: 'center', justifyContent: 'center' },
+  restCircleTxt: { fontSize: 18 },
+
+  addCircle:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,159,67,0.15)', borderWidth: 1.5, borderColor: '#FF9F43', alignItems: 'center', justifyContent: 'center' },
+  addCircleTxt: { color: '#FF9F43', fontSize: 22, fontWeight: '300', lineHeight: 26 },
+
+  pencilCircle:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(74,158,255,0.1)', borderWidth: 1.5, borderColor: '#4A9EFF', alignItems: 'center', justifyContent: 'center' },
+  pencilCircleTxt: { fontSize: 16 },
+
+  // Feature tiles
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 14 },
   tile: {
-    width: '48%',
-    backgroundColor: '#0d1f3c',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderTopWidth: 3,
-    elevation: 4,
-    minHeight: 120,
+    width: '48%', backgroundColor: '#0d1f3c', borderRadius: 16, padding: 24,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+    borderTopWidth: 3, elevation: 4, minHeight: 120,
   },
-  tileIcon: { fontSize: 36, marginBottom: 10 },
+  tileIcon:  { fontSize: 36, marginBottom: 10 },
   tileTitle: { color: '#fff', fontSize: 15, fontWeight: '700', textAlign: 'center' },
 
-  // Progress Charts banner card
   progressCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0d1f3c',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderTopWidth: 3,
-    borderTopColor: '#26de81',
-    elevation: 4,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d1f3c',
+    borderRadius: 16, padding: 18, marginBottom: 14,
+    borderTopWidth: 3, borderTopColor: '#26de81', elevation: 4,
   },
-  progressIcon: { fontSize: 28, marginRight: 14 },
-  progressContent: { flex: 1 },
-  progressTitle: { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  progressIcon:     { fontSize: 28, marginRight: 14 },
+  progressContent:  { flex: 1 },
+  progressTitle:    { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 4 },
   progressSubtitle: { color: '#5a7fa8', fontSize: 12 },
-  progressArrow: { fontSize: 32, color: '#4A9EFF' },
-
-  // Unused quote card styles (kept for reference / future use)
-  quoteCard: {
-    backgroundColor: '#0d1f3c',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    borderTopWidth: 3,
-    borderTopColor: '#FFD700',
-  },
-  quoteIcon: { fontSize: 24, marginBottom: 12 },
-  quote: {
-    color: '#c8d8f0',
-    fontSize: 15,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    lineHeight: 24,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  quoteDots: { flexDirection: 'row', gap: 6 },
-  quoteDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1a3a6b' },
-  quoteDotActive: { backgroundColor: '#FFD700', width: 20 },
+  progressArrow:    { fontSize: 32, color: '#4A9EFF' },
 });

@@ -101,7 +101,7 @@ export const AddFoodScreen = ({ route, navigation }: any) => {
     >
       {/* ── Header: Cancel / Title / Add ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => selectedFood ? setSelectedFood(null) : navigation.goBack()}>
           <Text style={styles.cancelBtn}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Add to {mealType}</Text>

@@ -1,10 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+// src/screens/NutritionScreen.tsx
+// Changes from original:
+//   1. Imports loadNutritionGoals from NutritionGoalsScreen
+//   2. Loads saved goals on mount and when screen is focused
+//   3. Calorie summary card is now tappable → navigates to NutritionGoals
+//   4. Macro card shows goals with progress bars
+// Everything else is unchanged.
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Alert, ActivityIndicator, RefreshControl,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { nutritionAPI } from '../services/api';
 import { useDailyQuote } from '../hooks/useDailyQuote';
+import {
+  loadNutritionGoals,
+  DEFAULT_GOALS,
+  type NutritionGoals,
+} from './NutritionGoalsScreen';
 
-// Shape of an individual logged food item
 interface FoodItem {
   _id?: string;
   name: string;
@@ -14,7 +30,6 @@ interface FoodItem {
   fat?: number;
 }
 
-// Shape of a meal section (breakfast, lunch, dinner, snacks)
 interface Meal {
   name: string;
   type: 'breakfast' | 'lunch' | 'dinner' | 'snacks';
@@ -27,51 +42,57 @@ export const NutritionScreen = ({ navigation }: any) => {
   const { user } = useAuth();
   const quote = useDailyQuote();
 
-  const [currentDate, setCurrentDate]     = useState(new Date()); // date shown in the date navigator
+  const [currentDate, setCurrentDate]     = useState(new Date());
   const [nutritionData, setNutritionData] = useState<any>(null);
   const [loading, setLoading]             = useState(true);
-  const [refreshing, setRefreshing]       = useState(false); // pull-to-refresh spinner state
+  const [refreshing, setRefreshing]       = useState(false);
+  // ✅ NEW: user's saved goals
+  const [goals, setGoals]                 = useState<NutritionGoals>(DEFAULT_GOALS);
 
-  // Reload nutrition data whenever the selected date changes
+  // ✅ Reload goals whenever this screen comes into focus (e.g. after saving on GoalsScreen)
+  useFocusEffect(
+    useCallback(() => {
+      loadNutritionGoals().then(setGoals);
+    }, []),
+  );
+
   useEffect(() => { loadNutritionData(); }, [currentDate]);
 
-  // Fetches the nutrition log for the currently selected date
   const loadNutritionData = async () => {
     if (!user?.id) return;
     try {
       setLoading(true);
-      const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const dateString = currentDate.toISOString().split('T')[0];
       const data = await nutritionAPI.getNutrition(user.id, dateString);
       setNutritionData(data);
     } catch (error: any) {
       Alert.alert('Error', error.error || error.message || 'Failed to load nutrition data');
     } finally {
       setLoading(false);
-      setRefreshing(false); // reset pull-to-refresh spinner
+      setRefreshing(false);
     }
   };
 
-  // Moves the selected date forward or backward by the given number of days
   const changeDate = (days: number) => {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + days);
     setCurrentDate(newDate);
   };
 
-  // Returns "Today", "Yesterday", "Tomorrow", or a short date string
   const formatDate = (date: Date) => {
     const today     = new Date();
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
     const tomorrow  = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     const isSame = (d1: Date, d2: Date) =>
-      d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getFullYear() === d2.getFullYear();
     if (isSame(date, today))     return 'Today';
     if (isSame(date, yesterday)) return 'Yesterday';
     if (isSame(date, tomorrow))  return 'Tomorrow';
     return date.toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Prompts for confirmation then removes a food item from the given meal
   const handleRemoveFood = async (mealType: string, foodId: string) => {
     if (!user?.id) return;
     Alert.alert('Remove Food', 'Remove this item?', [
@@ -81,14 +102,13 @@ export const NutritionScreen = ({ navigation }: any) => {
           try {
             const dateString = currentDate.toISOString().split('T')[0];
             const updatedData = await nutritionAPI.removeFood(user.id, dateString, mealType, foodId);
-            setNutritionData(updatedData); // update UI with the server response
+            setNutritionData(updatedData);
           } catch { Alert.alert('Error', 'Failed to remove food item'); }
-        }
-      }
+        },
+      },
     ]);
   };
 
-  // Opens the AddFood screen and passes a callback to add the returned food item to this screen
   const openAddFood = (mealType: string) => {
     navigation.navigate('AddFood', {
       mealType,
@@ -97,13 +117,12 @@ export const NutritionScreen = ({ navigation }: any) => {
         try {
           const dateString = currentDate.toISOString().split('T')[0];
           const updatedData = await nutritionAPI.addFood(user.id, dateString, mealType, foodItem);
-          setNutritionData(updatedData); // update UI immediately with the server response
+          setNutritionData(updatedData);
         } catch { Alert.alert('Error', 'Failed to add food item'); }
-      }
+      },
     });
   };
 
-  // Full-screen loader shown only on the very first load (before any data is available)
   if (loading && !nutritionData) {
     return (
       <View style={styles.centered}>
@@ -113,13 +132,16 @@ export const NutritionScreen = ({ navigation }: any) => {
     );
   }
 
-  // Derived values for the calorie summary card
-  const totalCalories = nutritionData?.totalCalories || 0;
-  const calorieGoal   = nutritionData?.calorieGoal   || 2000; // default goal if not set in profile
-  const progress      = Math.min((totalCalories / calorieGoal) * 100, 100); // capped at 100%
-  const overGoal      = totalCalories > calorieGoal; // drives red vs green colour throughout
+  const totalCalories  = nutritionData?.totalCalories || 0;
+  const totalProtein   = nutritionData?.totalProtein  || 0;
+  const totalCarbs     = nutritionData?.totalCarbs    || 0;
+  const totalFat       = nutritionData?.totalFat      || 0;
 
-  // Meal sections — items fall back to empty array if not yet logged for this date
+  // ✅ Use saved goals instead of hardcoded 2000
+  const calorieGoal    = goals.calories;
+  const progress       = Math.min((totalCalories / calorieGoal) * 100, 100);
+  const overGoal       = totalCalories > calorieGoal;
+
   const meals: Meal[] = [
     { name: 'Breakfast', type: 'breakfast', items: nutritionData?.breakfast || [], color: '#4A9EFF', icon: '🌅' },
     { name: 'Lunch',     type: 'lunch',     items: nutritionData?.lunch     || [], color: '#4A9EFF', icon: '☀️' },
@@ -130,7 +152,6 @@ export const NutritionScreen = ({ navigation }: any) => {
   return (
     <View style={styles.container}>
 
-      {/* ── Header: Back / Title / Weekly Stats ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>← Back</Text>
@@ -144,7 +165,6 @@ export const NutritionScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      {/* ── Date Navigator: ‹ Date Label › ── */}
       <View style={styles.dateNav}>
         <TouchableOpacity onPress={() => changeDate(-1)} style={styles.dateArrow}>
           <Text style={styles.dateArrowText}>‹</Text>
@@ -159,7 +179,6 @@ export const NutritionScreen = ({ navigation }: any) => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          // Pull-to-refresh reloads the current day's nutrition data
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); loadNutritionData(); }}
@@ -169,61 +188,73 @@ export const NutritionScreen = ({ navigation }: any) => {
         }
       >
 
-        {/* ── Calorie Summary Card ── */}
-        <View style={styles.summaryCard}>
+        {/* ✅ Calorie Summary Card — now tappable to edit goals */}
+        <TouchableOpacity
+          style={styles.summaryCard}
+          onPress={() => navigation.navigate('NutritionGoals')}
+          activeOpacity={0.85}
+        >
           <View style={styles.calorieRow}>
             <View>
               <Text style={styles.sectionLabel}>CALORIES</Text>
               <View style={styles.calorieDisplay}>
-                {/* Number turns red when over goal, green when under */}
                 <Text style={[styles.calorieNumber, { color: overGoal ? '#FF6B6B' : '#26de81' }]}>
                   {totalCalories}
                 </Text>
                 <Text style={styles.calorieGoal}>/ {calorieGoal}</Text>
               </View>
             </View>
-            {/* Right side shows remaining or exceeded amount */}
             <View style={styles.calorieMeta}>
               <Text style={[styles.remainingValue, { color: overGoal ? '#FF6B6B' : '#26de81' }]}>
                 {overGoal ? '+' : ''}{Math.abs(calorieGoal - totalCalories)}
               </Text>
               <Text style={styles.remainingLabel}>{overGoal ? 'over' : 'left'}</Text>
+              {/* ✅ Edit hint */}
+              <Text style={styles.editGoalHint}>✎ Edit goal</Text>
             </View>
           </View>
-
-          {/* Progress bar — turns red when over goal; capped at 100% visually */}
           <View style={styles.progressTrack}>
             <View style={[
               styles.progressFill,
-              { width: `${progress}%`, backgroundColor: overGoal ? '#FF6B6B' : '#4A9EFF' }
+              { width: `${progress}%`, backgroundColor: overGoal ? '#FF6B6B' : '#4A9EFF' },
             ]} />
           </View>
           <Text style={styles.progressPct}>{Math.round(progress)}% of daily goal</Text>
-        </View>
+        </TouchableOpacity>
 
-        {/* ── Macro Summary Card (Protein / Carbs / Fat) ── */}
+        {/* ✅ Macro Card — now shows goals with progress */}
         <View style={styles.macroCard}>
           {[
-            { label: 'Protein', value: nutritionData?.totalProtein || 0, unit: 'g', color: '#FFFFFF' },
-            { label: 'Carbs',   value: nutritionData?.totalCarbs   || 0, unit: 'g', color: '#FFFFFF' },
-            { label: 'Fat',     value: nutritionData?.totalFat     || 0, unit: 'g', color: '#FFFFFF' },
-          ].map(macro => (
-            <View key={macro.label} style={styles.macroItem}>
-              <Text style={[styles.macroValue, { color: macro.color }]}>{macro.value}{macro.unit}</Text>
-              <Text style={styles.macroLabel}>{macro.label}</Text>
-            </View>
-          ))}
+            { label: 'Protein', value: totalProtein, goal: goals.protein, color: '#4A9EFF' },
+            { label: 'Carbs',   value: totalCarbs,   goal: goals.carbs,   color: '#4ECDC4' },
+            { label: 'Fat',     value: totalFat,     goal: goals.fat,     color: '#7B6FFF' },
+          ].map((macro) => {
+            const pct = Math.min((macro.value / macro.goal) * 100, 100);
+            const over = macro.value > macro.goal;
+            return (
+              <View key={macro.label} style={styles.macroItem}>
+                <Text style={[styles.macroValue, { color: over ? '#FF6B6B' : '#fff' }]}>
+                  {macro.value}g
+                </Text>
+                <Text style={styles.macroGoalText}>/ {macro.goal}g</Text>
+                {/* Mini progress bar per macro */}
+                <View style={styles.macroTrack}>
+                  <View style={[
+                    styles.macroFill,
+                    { width: `${pct}%`, backgroundColor: over ? '#FF6B6B' : macro.color },
+                  ]} />
+                </View>
+                <Text style={styles.macroLabel}>{macro.label}</Text>
+              </View>
+            );
+          })}
         </View>
 
-        {/* ── Meal Cards ── */}
+        {/* ── Meal Cards (unchanged) ── */}
         {meals.map((meal) => {
-          // Sum calories across all items in this meal
           const mealCals = meal.items.reduce((sum, item) => sum + item.calories, 0);
-
           return (
             <View key={meal.type} style={[styles.mealCard, { borderTopColor: meal.color }]}>
-
-              {/* Meal header: icon + name + calorie total + add button */}
               <View style={styles.mealHeader}>
                 <View style={styles.mealTitleRow}>
                   <Text style={styles.mealIcon}>{meal.icon}</Text>
@@ -239,8 +270,6 @@ export const NutritionScreen = ({ navigation }: any) => {
                   <Text style={styles.addBtnText}>+</Text>
                 </TouchableOpacity>
               </View>
-
-              {/* Food item rows — tapping a row triggers the remove confirmation */}
               {meal.items.length > 0 ? (
                 meal.items.map((item) => (
                   <TouchableOpacity
@@ -250,7 +279,6 @@ export const NutritionScreen = ({ navigation }: any) => {
                   >
                     <View style={styles.foodInfo}>
                       <Text style={styles.foodName}>{item.name}</Text>
-                      {/* Macro line only shown if at least one macro value exists */}
                       {(item.protein || item.carbs || item.fat) && (
                         <Text style={styles.foodMacros}>
                           P: {item.protein || 0}g · C: {item.carbs || 0}g · F: {item.fat || 0}g
@@ -261,14 +289,12 @@ export const NutritionScreen = ({ navigation }: any) => {
                   </TouchableOpacity>
                 ))
               ) : (
-                // Placeholder shown when no food has been logged for this meal
                 <Text style={styles.emptyText}>Tap + to add food</Text>
               )}
             </View>
           );
         })}
 
-        {/* ── Daily Inspiration Quote ── */}
         <View style={styles.faithCard}>
           <Text style={styles.faithIcon}>🙏</Text>
           <View style={{ flex: 1 }}>
@@ -303,7 +329,6 @@ const styles = StyleSheet.create({
   },
   statsBtnText: { fontSize: 20 },
 
-  // Date navigation bar
   dateNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#0d1f3c', paddingHorizontal: 20, paddingVertical: 12,
@@ -315,13 +340,15 @@ const styles = StyleSheet.create({
 
   content: { padding: 16, paddingBottom: 40 },
 
-  // Calorie summary card
   summaryCard: {
     backgroundColor: '#0d1f3c', borderRadius: 16,
     padding: 18, marginBottom: 14,
     borderTopWidth: 3, borderTopColor: '#4A9EFF', elevation: 4,
   },
-  calorieRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 },
+  calorieRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-end', marginBottom: 14,
+  },
   sectionLabel: { color: '#5a7fa8', fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
   calorieDisplay: { flexDirection: 'row', alignItems: 'baseline' },
   calorieNumber: { fontSize: 42, fontWeight: '800' },
@@ -329,6 +356,7 @@ const styles = StyleSheet.create({
   calorieMeta: { alignItems: 'flex-end' },
   remainingValue: { fontSize: 24, fontWeight: '800' },
   remainingLabel: { color: '#5a7fa8', fontSize: 12, fontWeight: '600' },
+  editGoalHint: { color: '#4A9EFF', fontSize: 11, fontWeight: '600', marginTop: 4 },
   progressTrack: {
     height: 8, backgroundColor: '#1a3a6b',
     borderRadius: 4, overflow: 'hidden', marginBottom: 8,
@@ -336,23 +364,30 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 4 },
   progressPct: { color: '#5a7fa8', fontSize: 12, fontWeight: '600' },
 
-  // Macro summary card
   macroCard: {
     flexDirection: 'row', backgroundColor: '#0d1f3c',
     borderRadius: 16, padding: 18, marginBottom: 14,
     justifyContent: 'space-around', elevation: 4,
   },
-  macroItem: { alignItems: 'center' },
-  macroValue: { fontSize: 22, fontWeight: '800' },
-  macroLabel: { color: '#4A9EFF', fontSize: 11, fontWeight: '700', marginTop: 4, letterSpacing: 1 },
+  macroItem: { alignItems: 'center', flex: 1 },
+  macroValue: { fontSize: 20, fontWeight: '800' },
+  macroGoalText: { color: '#5a7fa8', fontSize: 11, marginBottom: 6 },
+  macroTrack: {
+    width: '80%', height: 4, backgroundColor: '#1a3a6b',
+    borderRadius: 2, overflow: 'hidden', marginBottom: 6,
+  },
+  macroFill: { height: '100%', borderRadius: 2 },
+  macroLabel: { color: '#4A9EFF', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
 
-  // Meal cards
   mealCard: {
     backgroundColor: '#0d1f3c', borderRadius: 16,
     padding: 18, marginBottom: 14,
     borderTopWidth: 3, elevation: 4,
   },
-  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  mealHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 14,
+  },
   mealTitleRow: { flexDirection: 'row', alignItems: 'center' },
   mealIcon: { fontSize: 24, marginRight: 12 },
   mealName: { color: '#fff', fontSize: 16, fontWeight: '800' },
@@ -360,7 +395,6 @@ const styles = StyleSheet.create({
   addBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   addBtnText: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 28 },
 
-  // Food item rows
   foodRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1a3a6b',
@@ -371,7 +405,6 @@ const styles = StyleSheet.create({
   foodCals: { color: '#4A9EFF', fontSize: 13, fontWeight: '700' },
   emptyText: { color: '#2a4a7f', fontStyle: 'italic', fontSize: 13, paddingVertical: 8 },
 
-  // Daily quote card
   faithCard: {
     flexDirection: 'row', backgroundColor: '#0d1f3c',
     borderRadius: 16, padding: 18,
