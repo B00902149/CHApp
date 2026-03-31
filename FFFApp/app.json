@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "plugins": [
-      [
+        "expo-dev-client",
+        [
         "react-native-health-connect",
         {
           "permissions": [
@@ -33,7 +34,7 @@
       ]
     ],
     "android": {
-      "package": "com.yourcompany.fff",
+      "package": "com.dallasdigital.coachinghub",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a1628"
@@ -41,7 +42,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.fff",
+      "bundleIdentifier": "com.dallasdigital.coachinghub",
       "infoPlist": {
         "NSHealthShareUsageDescription": "CoachingHub reads your steps, heart rate, weight, sleep and calories so you can track your fitness in one place.",
         "NSHealthUpdateUsageDescription": "CoachingHub needs permission to update your health data.",
